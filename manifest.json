@@ -1,0 +1,96 @@
+{
+  "$schema": "https://isb-engineering.kz/schema/cowork-bootstrap.json",
+  "name": "isb-cowork-bootstrap",
+  "version": "0.1.0",
+  "description": "Каталог скиллов ИСБ для Claude Cowork с раздачей по ролям. Источник правды для install.ps1.",
+
+  "skills": {
+    "contract-review": {
+      "source": "git-subdir",
+      "url": "https://github.com/ISB-Engineering/isb-agents.git",
+      "path": "plugins/isb-owner-pack/skills/contract-review",
+      "ref": "main",
+      "owner": "ISB"
+    },
+    "npa-monitor": {
+      "source": "git-subdir",
+      "url": "https://github.com/ISB-Engineering/isb-agents.git",
+      "path": "plugins/isb-owner-pack/skills/npa-monitor",
+      "ref": "main",
+      "owner": "ISB"
+    },
+
+    "brainstorming":                 { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/brainstorming", "ref": "main", "owner": "obra/superpowers" },
+    "writing-plans":                 { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/writing-plans", "ref": "main", "owner": "obra/superpowers" },
+    "executing-plans":               { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/executing-plans", "ref": "main", "owner": "obra/superpowers" },
+    "subagent-driven-development":   { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/subagent-driven-development", "ref": "main", "owner": "obra/superpowers" },
+    "dispatching-parallel-agents":   { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/dispatching-parallel-agents", "ref": "main", "owner": "obra/superpowers" },
+    "test-driven-development":       { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/test-driven-development", "ref": "main", "owner": "obra/superpowers" },
+    "systematic-debugging":          { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/systematic-debugging", "ref": "main", "owner": "obra/superpowers" },
+    "requesting-code-review":        { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/requesting-code-review", "ref": "main", "owner": "obra/superpowers" },
+    "receiving-code-review":         { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/receiving-code-review", "ref": "main", "owner": "obra/superpowers" },
+    "verification-before-completion":{ "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/verification-before-completion", "ref": "main", "owner": "obra/superpowers" },
+    "finishing-a-development-branch":{ "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/finishing-a-development-branch", "ref": "main", "owner": "obra/superpowers" },
+    "using-git-worktrees":           { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/using-git-worktrees", "ref": "main", "owner": "obra/superpowers" },
+    "using-superpowers":             { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/using-superpowers", "ref": "main", "owner": "obra/superpowers" },
+    "writing-skills":                { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/writing-skills", "ref": "main", "owner": "obra/superpowers" },
+
+    "vercel-react-best-practices":   { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-best-practices", "ref": "main", "owner": "vercel" },
+    "vercel-composition-patterns":   { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-composition-patterns", "ref": "main", "owner": "vercel" },
+    "vercel-react-view-transitions": { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-view-transitions", "ref": "main", "owner": "vercel" },
+    "vercel-react-native-skills":    { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-native-skills", "ref": "main", "owner": "vercel" },
+    "vercel-cli-with-tokens":        { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-cli-with-tokens", "ref": "main", "owner": "vercel" },
+    "deploy-to-vercel":              { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/deploy-to-vercel", "ref": "main", "owner": "vercel" },
+    "web-design-guidelines":         { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/web-design-guidelines", "ref": "main", "owner": "vercel" },
+
+    "supabase-postgres-best-practices": { "source": "git-subdir", "url": "https://github.com/supabase-community/supabase-plugin.git", "path": "skills/supabase-postgres-best-practices", "ref": "main", "owner": "supabase" }
+  },
+
+  "bundles": {
+    "base": [
+      "brainstorming",
+      "writing-plans",
+      "verification-before-completion"
+    ],
+    "dev": [
+      "@base",
+      "executing-plans",
+      "subagent-driven-development",
+      "dispatching-parallel-agents",
+      "test-driven-development",
+      "systematic-debugging",
+      "requesting-code-review",
+      "receiving-code-review",
+      "finishing-a-development-branch",
+      "using-git-worktrees",
+      "using-superpowers",
+      "writing-skills",
+      "vercel-react-best-practices",
+      "vercel-composition-patterns",
+      "vercel-react-view-transitions",
+      "vercel-react-native-skills",
+      "vercel-cli-with-tokens",
+      "deploy-to-vercel",
+      "web-design-guidelines",
+      "supabase-postgres-best-practices"
+    ],
+
+    "owner":   ["@base", "contract-review", "npa-monitor"],
+    "sales":   ["@base"],
+    "service": ["@base"],
+    "finance": ["@base"],
+    "hr":      ["@base"],
+    "supply":  ["@base"],
+    "install": ["@base"],
+    "design":  ["@base", "web-design-guidelines"],
+    "planning":["@base"]
+  },
+
+  "notes": [
+    "Бандл может ссылаться на другой через '@имя' — install.ps1 раскрывает рекурсивно.",
+    "Скиллы ставятся в %USERPROFILE%/.claude/skills/<name>/, Cowork подхватывает автоматически.",
+    "owner='ISB' значит наш собственный скилл (живёт в ISB-Engineering/isb-agents).",
+    "Остальные owners — внешние вендоры (obra/superpowers, vercel, supabase-community).",
+    "При обновлении manifest.json (новая версия скилла или новый скилл) — install.ps1 при следующем запуске или хук SessionStart подтянут изменения."
+  ]
+}
