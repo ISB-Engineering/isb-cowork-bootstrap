@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Устанавливает и обновляет скиллы Claude Cowork для сотрудника ИСБ по ролям.
@@ -56,6 +56,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+function Invoke-Git {
+  param([string[]]$GitArgs)
+  $output = & git @GitArgs 2>&1
+  if ($LASTEXITCODE -ne 0) {
+    throw "git $($GitArgs -join ' ') failed (exit $LASTEXITCODE): $output"
+  }
+}
 
 function Write-Info($msg) {
   if (-not $Silent) { Write-Host "[isb-cowork] $msg" -ForegroundColor Cyan }
@@ -140,11 +150,11 @@ foreach ($skillName in $skillsToInstall) {
     # Clone or update repo cache
     if (-not (Test-Path (Join-Path $repoDir ".git"))) {
       Write-Info "Клонирую $repoUrl @ $ref"
-      git clone --depth 1 --branch $ref $repoUrl $repoDir 2>&1 | Out-Null
+      Invoke-Git @("clone", "--depth", "1", "--quiet", "--branch", $ref, $repoUrl, $repoDir)
     } else {
       Write-Info "Обновляю $repoSafe @ $ref"
-      git -C $repoDir fetch --depth 1 origin $ref 2>&1 | Out-Null
-      git -C $repoDir reset --hard FETCH_HEAD 2>&1 | Out-Null
+      Invoke-Git @("-C", $repoDir, "fetch", "--depth", "1", "--quiet", "origin", $ref)
+      Invoke-Git @("-C", $repoDir, "reset", "--hard", "--quiet", "FETCH_HEAD")
     }
 
     $srcDir = Join-Path $repoDir $subPath
@@ -175,24 +185,36 @@ if (-not $NoAutoUpdate -and -not $Silent) {
   $thisScript = $MyInvocation.MyCommand.Path
   $updateCmd  = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$thisScript`" -Roles $rolesArg$devFlag -Silent -NoAutoUpdate"
 
-  $settings = @{}
+  $settings = $null
   if (Test-Path $SettingsPath) {
     try {
-      $settings = Get-Content $SettingsPath -Raw | ConvertFrom-Json -AsHashtable
+      $settings = Get-Content $SettingsPath -Raw | ConvertFrom-Json
     } catch {
       Write-Warn2 "settings.json повреждён — пересоздаю"
-      $settings = @{}
+      $settings = $null
     }
   }
-  if (-not $settings.hooks) { $settings.hooks = @{} }
-  $settings.hooks.SessionStart = @(
-    @{
+  if ($null -eq $settings) {
+    $settings = [PSCustomObject]@{}
+  }
+
+  $sessionStartArray = @(
+    [PSCustomObject]@{
       matcher = "startup"
       hooks   = @(
-        @{ type = "command"; command = $updateCmd }
+        [PSCustomObject]@{ type = "command"; command = $updateCmd }
       )
     }
   )
+
+  if (-not (Get-Member -InputObject $settings -Name 'hooks' -MemberType NoteProperty -ErrorAction SilentlyContinue)) {
+    $settings | Add-Member -NotePropertyName 'hooks' -NotePropertyValue ([PSCustomObject]@{})
+  }
+  if (-not (Get-Member -InputObject $settings.hooks -Name 'SessionStart' -MemberType NoteProperty -ErrorAction SilentlyContinue)) {
+    $settings.hooks | Add-Member -NotePropertyName 'SessionStart' -NotePropertyValue $sessionStartArray
+  } else {
+    $settings.hooks.SessionStart = $sessionStartArray
+  }
 
   $settingsDir = Split-Path $SettingsPath -Parent
   New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null

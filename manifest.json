@@ -35,13 +35,10 @@
     "using-superpowers":             { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/using-superpowers", "ref": "main", "owner": "obra/superpowers" },
     "writing-skills":                { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/writing-skills", "ref": "main", "owner": "obra/superpowers" },
 
-    "vercel-react-best-practices":   { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-best-practices", "ref": "main", "owner": "vercel" },
-    "vercel-composition-patterns":   { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-composition-patterns", "ref": "main", "owner": "vercel" },
-    "vercel-react-view-transitions": { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-view-transitions", "ref": "main", "owner": "vercel" },
-    "vercel-react-native-skills":    { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-react-native-skills", "ref": "main", "owner": "vercel" },
-    "vercel-cli-with-tokens":        { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-cli-with-tokens", "ref": "main", "owner": "vercel" },
-    "deploy-to-vercel":              { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/deploy-to-vercel", "ref": "main", "owner": "vercel" },
-    "web-design-guidelines":         { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/web-design-guidelines", "ref": "main", "owner": "vercel" },
+    "vercel-cli":                       { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/vercel-cli", "ref": "main", "owner": "vercel" },
+    "react-best-practices":             { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/react-best-practices", "ref": "main", "owner": "vercel" },
+    "nextjs":                           { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/nextjs", "ref": "main", "owner": "vercel" },
+    "shadcn":                           { "source": "git-subdir", "url": "https://github.com/vercel/vercel-plugin.git", "path": "skills/shadcn", "ref": "main", "owner": "vercel" },
 
     "supabase-postgres-best-practices": { "source": "git-subdir", "url": "https://github.com/supabase-community/supabase-plugin.git", "path": "skills/supabase-postgres-best-practices", "ref": "main", "owner": "supabase" }
   },
@@ -65,13 +62,10 @@
       "using-git-worktrees",
       "using-superpowers",
       "writing-skills",
-      "vercel-react-best-practices",
-      "vercel-composition-patterns",
-      "vercel-react-view-transitions",
-      "vercel-react-native-skills",
-      "vercel-cli-with-tokens",
-      "deploy-to-vercel",
-      "web-design-guidelines",
+      "vercel-cli",
+      "react-best-practices",
+      "nextjs",
+      "shadcn",
       "supabase-postgres-best-practices"
     ],
 
@@ -82,7 +76,7 @@
     "hr":      ["@base"],
     "supply":  ["@base"],
     "install": ["@base"],
-    "design":  ["@base", "web-design-guidelines"],
+    "design":  ["@base", "shadcn"],
     "planning":["@base"]
   },
 
@@ -92,5 +86,11 @@
     "owner='ISB' значит наш собственный скилл (живёт в ISB-Engineering/isb-agents).",
     "Остальные owners — внешние вендоры (obra/superpowers, vercel, supabase-community).",
     "При обновлении manifest.json (новая версия скилла или новый скилл) — install.ps1 при следующем запуске или хук SessionStart подтянут изменения."
+  ],
+
+  "tbd_skills_to_locate": [
+    "vercel-react-best-practices, vercel-composition-patterns, vercel-react-view-transitions, vercel-react-native-skills, vercel-cli-with-tokens, deploy-to-vercel, web-design-guidelines — установлены у Юрия в ~/.claude/skills/, но их нет в актуальном vercel/vercel-plugin (репо переименовал скиллы). Нужно найти исходный источник или решить что заменяем на актуальные (react-best-practices, vercel-cli, ...).",
+    "canvas-design — установлен у Юрия, источник не подтверждён. Скорее всего отдельный Anthropic-репо.",
+    "anthropic-skills:docx, anthropic-skills:xlsx, anthropic-skills:pdf, anthropic-skills:pptx, anthropic-skills:skill-creator, anthropic-skills:consolidate-memory, anthropic-skills:setup-cowork — namespaced скиллы из плагина anthropic-skills, ставятся через marketplace, не через ~/.claude/skills/."
   ]
 }
