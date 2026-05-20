@@ -111,7 +111,7 @@ if ($ManifestPath -and (Test-Path $ManifestPath)) {
       Invoke-Git @("clone", "--depth", "1", "--quiet", "https://github.com/ISB-Engineering/isb-cowork-bootstrap.git", $bootstrapRepoDir)
     }
   } catch {
-    throw "Не удалось получить manifest.json. Проверь авторизацию GitHub (gh auth status). $($_.Exception.Message)"
+    throw "Не удалось получить manifest.json. Проверь интернет-соединение. $($_.Exception.Message)"
   }
   $localManifest = Join-Path $bootstrapRepoDir "manifest.json"
   if (-not (Test-Path $localManifest)) { throw "manifest.json не найден после клонирования: $localManifest" }

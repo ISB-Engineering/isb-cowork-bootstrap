@@ -142,7 +142,7 @@ $controls['BtnInstall'].Add_Click({
         if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
       }
     } catch {
-      throw "Не удалось скачать установщик из ISB-Engineering/isb-cowork-bootstrap.`n`nВозможно, нужна авторизация GitHub. Откройте PowerShell и выполните:`n    gh auth login`nПосле этого запустите установщик снова."
+      throw "Не удалось скачать установщик. Проверьте интернет-соединение и попробуйте снова."
     }
 
     $installPs1Path = Join-Path $bootstrapRepoDir 'install.ps1'
