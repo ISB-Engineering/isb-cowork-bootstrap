@@ -50,6 +50,7 @@ param(
   [switch]$Silent,
 
   [string]$ManifestUrl = "https://raw.githubusercontent.com/ISB-Engineering/isb-cowork-bootstrap/main/manifest.json",
+  [string]$ManifestPath = "",
   [string]$SkillsDir   = (Join-Path $env:USERPROFILE ".claude\skills"),
   [string]$CacheDir    = (Join-Path $env:TEMP "isb-cowork-cache"),
   [string]$SettingsPath = (Join-Path $env:USERPROFILE ".claude\settings.json")
@@ -90,11 +91,31 @@ New-Item -ItemType Directory -Force -Path $CacheDir  | Out-Null
 
 # --- 2. Load manifest ---
 
-Write-Info "Читаю manifest: $ManifestUrl"
-try {
-  $manifest = Invoke-RestMethod -Uri $ManifestUrl -UseBasicParsing
-} catch {
-  throw "Не удалось скачать manifest.json. Проверь интернет и доступ к GitHub. Ошибка: $($_.Exception.Message)"
+if ($ManifestPath -and (Test-Path $ManifestPath)) {
+  Write-Info "Читаю локальный manifest: $ManifestPath"
+  try {
+    $manifest = Get-Content $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  } catch {
+    throw "Не удалось прочитать manifest.json: $($_.Exception.Message)"
+  }
+} else {
+  # Клонируем bootstrap-репо через git — работает с приватными репо (через Git Credential Manager).
+  # raw.githubusercontent.com не подходит, потому что репо приватный.
+  $bootstrapRepoDir = Join-Path $CacheDir "ISB-Engineering_isb-cowork-bootstrap"
+  Write-Info "Получаю manifest.json из ISB-Engineering/isb-cowork-bootstrap"
+  try {
+    if (Test-Path (Join-Path $bootstrapRepoDir ".git")) {
+      Invoke-Git @("-C", $bootstrapRepoDir, "fetch", "--depth", "1", "--quiet", "origin", "main")
+      Invoke-Git @("-C", $bootstrapRepoDir, "reset", "--hard", "--quiet", "FETCH_HEAD")
+    } else {
+      Invoke-Git @("clone", "--depth", "1", "--quiet", "https://github.com/ISB-Engineering/isb-cowork-bootstrap.git", $bootstrapRepoDir)
+    }
+  } catch {
+    throw "Не удалось получить manifest.json. Проверь авторизацию GitHub (gh auth status). $($_.Exception.Message)"
+  }
+  $localManifest = Join-Path $bootstrapRepoDir "manifest.json"
+  if (-not (Test-Path $localManifest)) { throw "manifest.json не найден после клонирования: $localManifest" }
+  $manifest = Get-Content $localManifest -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 # --- 3. Resolve bundles -> skills ---
@@ -183,6 +204,7 @@ if (-not $NoAutoUpdate -and -not $Silent) {
   $rolesArg = $Roles -join ","
   $devFlag  = if ($IncludeDev) { " -IncludeDev" } else { "" }
   $thisScript = $MyInvocation.MyCommand.Path
+  # На автообновлении manifest всегда подтягиваем свежий через git (без передачи -ManifestPath).
   $updateCmd  = "powershell -NoProfile -ExecutionPolicy Bypass -File `"$thisScript`" -Roles $rolesArg$devFlag -Silent -NoAutoUpdate"
 
   $settings = $null

@@ -123,23 +123,43 @@ $controls['BtnInstall'].Add_Click({
       throw "Git не найден. Установите Git for Windows (https://git-scm.com/download/win) и запустите установщик снова."
     }
 
-    # 2. Download install.ps1
+    # 2. Get bootstrap repo via git (works with private repos via Git Credential Manager)
     $controls['Status'].Text = 'Скачиваю установщик…'
     $window.Dispatcher.Invoke([Action]{}, 'Render')
 
-    $installPs1Url  = 'https://raw.githubusercontent.com/ISB-Engineering/isb-cowork-bootstrap/main/install.ps1'
-    $installPs1Path = Join-Path $env:TEMP 'isb-install.ps1'
-    Invoke-WebRequest -Uri $installPs1Url -OutFile $installPs1Path -UseBasicParsing
+    $cacheDir = Join-Path $env:TEMP 'isb-cowork-cache'
+    New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+    $bootstrapRepoDir = Join-Path $cacheDir 'ISB-Engineering_isb-cowork-bootstrap'
+
+    try {
+      if (Test-Path (Join-Path $bootstrapRepoDir '.git')) {
+        & git -C $bootstrapRepoDir fetch --depth 1 --quiet origin main 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'git fetch failed' }
+        & git -C $bootstrapRepoDir reset --hard --quiet FETCH_HEAD 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'git reset failed' }
+      } else {
+        & git clone --depth 1 --quiet 'https://github.com/ISB-Engineering/isb-cowork-bootstrap.git' $bootstrapRepoDir 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'git clone failed' }
+      }
+    } catch {
+      throw "Не удалось скачать установщик из ISB-Engineering/isb-cowork-bootstrap.`n`nВозможно, нужна авторизация GitHub. Откройте PowerShell и выполните:`n    gh auth login`nПосле этого запустите установщик снова."
+    }
+
+    $installPs1Path = Join-Path $bootstrapRepoDir 'install.ps1'
+    $manifestPath   = Join-Path $bootstrapRepoDir 'manifest.json'
+
+    if (-not (Test-Path $installPs1Path)) {
+      throw "install.ps1 не найден в склонированном репозитории — возможно структура репо изменилась."
+    }
 
     # 3. Run install.ps1
     $rolesArg = if ($selectedRoles.Count -gt 0) { $selectedRoles -join ',' } else { 'owner' }
-    # If user only selected Dev with no role — fall back to owner-as-shell + dev (owner is harmless, just base+2 ISB skills)
     if ($selectedRoles.Count -eq 0) { $rolesArg = 'owner' }
 
     $controls['Status'].Text = "Устанавливаю скиллы…"
     $window.Dispatcher.Invoke([Action]{}, 'Render')
 
-    $psArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$installPs1Path,'-Roles',$rolesArg)
+    $psArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$installPs1Path,'-Roles',$rolesArg,'-ManifestPath',$manifestPath)
     if ($includeDev) { $psArgs += '-IncludeDev' }
 
     $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList $psArgs -NoNewWindow -PassThru -Wait `
