@@ -28,21 +28,28 @@
 2. Git for Windows установлен (https://git-scm.com/download/win).
 3. У сотрудника есть доступ к репо `ISB-Engineering` на GitHub (приватные репо требуют `gh auth login`).
 
-**Команда установки (запускается IT-сотрудником):**
+### Способ 1 — GUI (рекомендуется)
+
+Стабильная ссылка на последнюю версию:
+
+**https://github.com/ISB-Engineering/isb-cowork-bootstrap/releases/latest/download/isb-installer.exe**
+
+Скачать → двойной клик → откроется окно с чекбоксами ролей → выбрать → "Установить".
+
+После установки сотруднику ничего делать не нужно. При каждом старте Claude Cowork хук автоматически перезапускает `install.ps1 -Silent` и подтягивает обновления из Git.
+
+> Note: .exe не подписан digital signature. SmartScreen может предупредить при первом запуске — "Подробнее" → "Запустить всё равно".
+
+### Способ 2 — CLI (для автоматизации / без GUI)
 
 ```powershell
-# Для Юрия (владелец + dev)
 iwr -UseBasicParsing https://raw.githubusercontent.com/ISB-Engineering/isb-cowork-bootstrap/main/install.ps1 -OutFile $env:TEMP\install-isb.ps1
 powershell -ExecutionPolicy Bypass -File $env:TEMP\install-isb.ps1 -Roles owner -IncludeDev
 
-# Для Александры (продажи)
+# Другие варианты
 powershell -ExecutionPolicy Bypass -File $env:TEMP\install-isb.ps1 -Roles sales
-
-# Комбинированная роль (владелец + финансы + HR)
 powershell -ExecutionPolicy Bypass -File $env:TEMP\install-isb.ps1 -Roles owner,finance,hr -IncludeDev
 ```
-
-После установки сотруднику ничего делать не нужно. При каждом старте Claude Cowork хук автоматически перезапускает `install.ps1 -Silent` и подтягивает обновления.
 
 ## Если что-то пошло не так
 
@@ -70,7 +77,21 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\install-isb.ps1 -Roles owner,
 - Наши собственные (`isb-agents`) — приватный репо. Сотрудник должен быть в org `ISB-Engineering` и аутентифицирован (`gh auth login`).
 - Секреты (Bitrix-токены, API-ключи) **не лежат в скиллах**. Они идут через MCP-конфиги (см. `docs/mcp/isbaza_mcp_contract.md` в `isb-agents`).
 
+## Сборка .exe (для разработчиков)
+
+```cmd
+build.cmd
+```
+
+Использует csc.exe из .NET Framework 4 (есть на любом Windows 10+). На выходе — `isb-installer.exe` (~14 КБ), готовый к публикации:
+
+```powershell
+gh release create vX.Y.Z isb-installer.exe --title "vX.Y.Z" --notes "..."
+```
+
+После релиза ссылка `releases/latest/download/isb-installer.exe` автоматически указывает на свежий артефакт.
+
 ## Текущий статус
 
-- v0.1 (2026-05-19): первая рабочая версия. **Требует тестового прогона** на ПК Юрия перед раскаткой на команду.
+- v0.1.0 (2026-05-20): GUI installer + CLI bootstrap. Опубликовано в Releases.
 - Bundles `service`, `finance`, `hr`, `supply`, `install`, `design`, `planning` — содержат только `base`, наполнятся когда появятся карточки агентов в `isb-agents`.
