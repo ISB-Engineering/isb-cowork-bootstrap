@@ -2,3 +2,7 @@
 Thumbs.db
 *.log
 *.tmp
+
+# Build artifacts — .exe идёт только через GitHub Releases, не в репо
+*.exe
+.tools/
