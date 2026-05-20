@@ -6,7 +6,7 @@
   Показывает модалку с чекбоксами ролей, при подтверждении скачивает install.ps1
   из main-ветки isb-cowork-bootstrap и запускает с выбранными ролями.
 
-  Этот скрипт компилируется в isb-installer.exe через ps2exe (см. build.ps1).
+  Этот скрипт упаковывается в isb-installer.exe через csc.exe + launcher.cs (см. build.cmd).
 #>
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -18,8 +18,8 @@ Add-Type -AssemblyName WindowsBase
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="ISB Cowork Installer"
-        Width="540" Height="560"
+        Title="Установка AI-скиллов ИСБ"
+        Width="640" Height="580"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         FontFamily="Segoe UI"
@@ -39,23 +39,23 @@ Add-Type -AssemblyName WindowsBase
     <TextBlock Grid.Row="0" Text="Установка AI-скиллов ИСБ"
                FontSize="20" FontWeight="SemiBold" Margin="0,0,0,4"/>
     <TextBlock Grid.Row="1" TextWrapping="Wrap" Foreground="#666" Margin="0,0,0,16"
-               Text="Выберите роль(и) сотрудника. Скиллы установятся в ~/.claude/skills/ и будут автоматически обновляться при каждом запуске Claude Cowork."/>
+               Text="Отметьте всё, чем сотрудник занимается. Можно несколько вариантов сразу. Скиллы появятся в Claude Cowork и будут автоматически обновляться при каждом запуске."/>
 
-    <TextBlock Grid.Row="2" Text="Роли:" FontWeight="SemiBold" Margin="0,0,0,8"/>
+    <TextBlock Grid.Row="2" Text="Выберите роли сотрудника:" FontWeight="SemiBold" Margin="0,0,0,8"/>
 
     <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Margin="0,0,0,12">
       <StackPanel Name="RolesPanel">
-        <CheckBox Name="cbOwner"    Content="Owner — владелец / руководитель (OWN-005, OWN-006)" Margin="0,4"/>
-        <CheckBox Name="cbSales"    Content="Sales — отдел продаж" Margin="0,4"/>
-        <CheckBox Name="cbService"  Content="Service — служба сервиса" Margin="0,4"/>
-        <CheckBox Name="cbFinance"  Content="Finance — финансы / бухгалтерия" Margin="0,4"/>
-        <CheckBox Name="cbHr"       Content="HR — кадры / Анастасия" Margin="0,4"/>
-        <CheckBox Name="cbSupply"   Content="Supply — снабжение / Руфина" Margin="0,4"/>
-        <CheckBox Name="cbInstall"  Content="Install — монтаж / инженеры" Margin="0,4"/>
-        <CheckBox Name="cbDesign"   Content="Design — проектирование" Margin="0,4"/>
-        <CheckBox Name="cbPlanning" Content="Planning — планирование / Темырлан" Margin="0,4"/>
+        <CheckBox Name="cbOwner"    Content="Владелец и руководители (проверка договоров, мониторинг изменений в законах РК)" Margin="0,4"/>
+        <CheckBox Name="cbSales"    Content="Продажи (резюме сделок из Bitrix, голосовая заметка о клиенте после встречи)" Margin="0,4"/>
+        <CheckBox Name="cbPlanning" Content="Планирование (генератор АВР, контроль отставаний по графику)" Margin="0,4"/>
+        <CheckBox Name="cbDesign"   Content="Проектирование (технические решения, ответы на замечания экспертизы)" Margin="0,4"/>
+        <CheckBox Name="cbSupply"   Content="Снабжение (запросы поставщикам, сравнение коммерческих предложений)" Margin="0,4"/>
+        <CheckBox Name="cbInstall"  Content="Монтаж (голосовой отчёт с объекта, акт скрытых работ по фото)" Margin="0,4"/>
+        <CheckBox Name="cbService"  Content="Сервис (отчёт по заявке голосом, ответ клиенту 24/7)" Margin="0,4"/>
+        <CheckBox Name="cbFinance"  Content="Финансы (авансовые отчёты по фото чеков, прогноз кассы и дебиторки)" Margin="0,4"/>
+        <CheckBox Name="cbHr"       Content="Кадры (скрининг резюме, кадровая документация по нормам РК)" Margin="0,4"/>
         <Separator Margin="0,10"/>
-        <CheckBox Name="cbDev"      Content="+ Dev-скиллы (методические + Vercel + Supabase)" Margin="0,4" FontWeight="SemiBold"/>
+        <CheckBox Name="cbDev"      Content="+ Помощники для разработчиков (мозговой штурм, отладка, ревью кода, Vercel, Supabase)" Margin="0,4" FontWeight="SemiBold"/>
       </StackPanel>
     </ScrollViewer>
 
@@ -102,7 +102,7 @@ $controls['BtnInstall'].Add_Click({
   $includeDev = [bool]$controls['cbDev'].IsChecked
 
   if ($selectedRoles.Count -eq 0 -and -not $includeDev) {
-    [System.Windows.MessageBox]::Show('Выберите хотя бы одну роль или Dev-скиллы.', 'ISB Installer', 'OK', 'Warning') | Out-Null
+    [System.Windows.MessageBox]::Show('Отметьте хотя бы одну роль или помощников для разработчиков.', 'Установка скиллов', 'OK', 'Warning') | Out-Null
     return
   }
 
@@ -136,7 +136,7 @@ $controls['BtnInstall'].Add_Click({
     # If user only selected Dev with no role — fall back to owner-as-shell + dev (owner is harmless, just base+2 ISB skills)
     if ($selectedRoles.Count -eq 0) { $rolesArg = 'owner' }
 
-    $controls['Status'].Text = "Устанавливаю скиллы… (роли: $rolesArg$(if ($includeDev) { ' + dev' }))"
+    $controls['Status'].Text = "Устанавливаю скиллы…"
     $window.Dispatcher.Invoke([Action]{}, 'Render')
 
     $psArgs = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$installPs1Path,'-Roles',$rolesArg)
@@ -153,9 +153,9 @@ $controls['BtnInstall'].Add_Click({
 
     $controls['Progress'].IsIndeterminate = $false
     $controls['Progress'].Value = 100
-    $controls['Status'].Text = "Готово! Скиллы установлены в $env:USERPROFILE\.claude\skills\. Запустите Claude Cowork — скиллы доступны автоматически. Они также будут обновляться при каждом запуске."
+    $controls['Status'].Text = "Готово. Запустите Claude Cowork — скиллы уже доступны и будут обновляться автоматически."
 
-    [System.Windows.MessageBox]::Show("Установка завершена.`n`nРоли: $rolesArg$(if ($includeDev) { ' + dev' })`n`nЗапустите Claude Cowork — скиллы уже доступны.", 'ISB Installer', 'OK', 'Information') | Out-Null
+    [System.Windows.MessageBox]::Show("Установка завершена.`n`nЗапустите Claude Cowork — скиллы уже доступны.`nОни будут автоматически обновляться при каждом запуске.", 'Установка скиллов', 'OK', 'Information') | Out-Null
     $window.Close()
   } catch {
     $controls['Progress'].IsIndeterminate = $false
