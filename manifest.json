@@ -19,6 +19,13 @@
       "ref": "main",
       "owner": "ISB"
     },
+    "isb-wordpress-blog": {
+      "source": "git-subdir",
+      "url": "https://github.com/ISB-Engineering/isb-skills-dev.git",
+      "path": "skills/tools/isb-wordpress-blog",
+      "ref": "main",
+      "owner": "ISB"
+    },
 
     "brainstorming":                 { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/brainstorming", "ref": "main", "owner": "obra/superpowers" },
     "writing-plans":                 { "source": "git-subdir", "url": "https://github.com/obra/superpowers.git", "path": "skills/writing-plans", "ref": "main", "owner": "obra/superpowers" },
@@ -66,10 +73,11 @@
       "react-best-practices",
       "nextjs",
       "shadcn",
-      "supabase-postgres-best-practices"
+      "supabase-postgres-best-practices",
+      "isb-wordpress-blog"
     ],
 
-    "owner":   ["@base", "contract-review", "npa-monitor"],
+    "owner":   ["@base", "contract-review", "npa-monitor", "isb-wordpress-blog"],
     "sales":   ["@base"],
     "service": ["@base"],
     "finance": ["@base"],
