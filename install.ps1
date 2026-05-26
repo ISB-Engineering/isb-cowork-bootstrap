@@ -44,7 +44,9 @@ param(
   [string]$LocalMarketplaceFile = (Join-Path $env:USERPROFILE ".claude\plugins\local\.claude-marketplace\marketplace.json"),
   [string]$LegacySkillsDir = (Join-Path $env:USERPROFILE ".claude\skills"),
   [string]$CacheDir     = (Join-Path $env:TEMP "isb-cowork-cache"),
-  [string]$SettingsPath = (Join-Path $env:USERPROFILE ".claude\settings.json")
+  [string]$SettingsPath = (Join-Path $env:USERPROFILE ".claude\settings.json"),
+  [string]$CoworkSkillsPluginRoot = (Join-Path $env:APPDATA "Claude\local-agent-mode-sessions\skills-plugin"),
+  [string]$IsbSkillPrefix = "isb-"
 )
 
 $ErrorActionPreference = "Stop"
@@ -276,7 +278,113 @@ if ($ourPlugin) {
 $mp | ConvertTo-Json -Depth 10 | Set-Content -Path $LocalMarketplaceFile -Encoding UTF8
 Write-Info "Зарегистрирован в локальном marketplace: $LocalMarketplaceFile"
 
-# --- 7. Register auto-update hook ---
+# --- 7. Register in Cowork UI (Settings → Skills → Personal skills) ---
+# Cowork хранит UI-видимые скиллы в собственной директории с GUID-ами:
+#   %APPDATA%\Claude\local-agent-mode-sessions\skills-plugin\<workspace>\<plugin>\
+# Чтобы скиллы появились в Personal skills, копируем SKILL.md туда и добавляем
+# записи в manifest.json (creatorType: "user"). Префикс isb- избегает коллизий
+# со встроенными (xlsx, docx и т.п.).
+
+function Read-SkillFrontmatter {
+  param([string]$SkillMdPath)
+  $result = @{ name = ""; description = "" }
+  if (-not (Test-Path $SkillMdPath)) { return $result }
+  $content = Get-Content $SkillMdPath -Raw -Encoding UTF8
+  if ($content -match "(?ms)\A---\s*\r?\n(.*?)\r?\n---") {
+    $fm = $matches[1]
+    foreach ($line in $fm -split "`n") {
+      if ($line -match '^\s*name:\s*"?(.+?)"?\s*$')         { $result.name = $matches[1].Trim() }
+      if ($line -match '^\s*description:\s*"?(.+?)"?\s*$')  { $result.description = $matches[1].Trim() }
+    }
+  }
+  return $result
+}
+
+if (Test-Path $CoworkSkillsPluginRoot) {
+  $workspaceDirs = @(Get-ChildItem $CoworkSkillsPluginRoot -Directory -ErrorAction SilentlyContinue)
+  $coworkPluginInstances = @()
+  foreach ($ws in $workspaceDirs) {
+    $pluginDirs = @(Get-ChildItem $ws.FullName -Directory -ErrorAction SilentlyContinue)
+    foreach ($pl in $pluginDirs) {
+      if (Test-Path (Join-Path $pl.FullName "manifest.json")) {
+        $coworkPluginInstances += $pl.FullName
+      }
+    }
+  }
+
+  if ($coworkPluginInstances.Count -eq 0) {
+    Write-Warn2 "Cowork plugin-instance не найден (папка $CoworkSkillsPluginRoot пуста). Запустите Cowork хотя бы один раз и перезапустите установщик чтобы скиллы появились в UI."
+  } else {
+    foreach ($coworkPluginDir in $coworkPluginInstances) {
+      Write-Info "Регистрирую в Cowork UI: $coworkPluginDir"
+      $coworkManifestPath = Join-Path $coworkPluginDir "manifest.json"
+      $coworkSkillsDir    = Join-Path $coworkPluginDir "skills"
+      New-Item -ItemType Directory -Force -Path $coworkSkillsDir | Out-Null
+
+      try {
+        $coworkManifest = Get-Content $coworkManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+      } catch {
+        Write-Warn2 "  не смог прочитать manifest.json — пропускаю этот инстанс"
+        continue
+      }
+
+      # Нормализуем skills в массив
+      $existingSkills = @()
+      if ($coworkManifest.skills) { $existingSkills = @($coworkManifest.skills) }
+
+      foreach ($skillName in $skillsToInstall) {
+        $srcSkillDir = Join-Path $PluginSkillsDir $skillName
+        if (-not (Test-Path $srcSkillDir)) { continue }
+
+        $isbSkillId  = "$IsbSkillPrefix$skillName"
+        $cwSkillDir  = Join-Path $coworkSkillsDir $isbSkillId
+
+        # Копируем содержимое скилла
+        if (Test-Path $cwSkillDir) { Remove-Item -Recurse -Force $cwSkillDir }
+        Copy-Item -Recurse -Force $srcSkillDir $cwSkillDir
+
+        # Извлекаем имя и описание из SKILL.md
+        $fm = Read-SkillFrontmatter (Join-Path $cwSkillDir "SKILL.md")
+        $skillDisplayName = if ($fm.name) { $fm.name } else { $skillName }
+        $skillDescription = if ($fm.description) { $fm.description } else { "" }
+
+        $entry = [PSCustomObject]@{
+          skillId     = $isbSkillId
+          name        = $skillDisplayName
+          description = $skillDescription
+          creatorType = "user"
+          updatedAt   = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ")
+          enabled     = $true
+        }
+
+        # Заменяем или добавляем
+        $idx = -1
+        for ($i = 0; $i -lt $existingSkills.Count; $i++) {
+          if ($existingSkills[$i].skillId -eq $isbSkillId) { $idx = $i; break }
+        }
+        if ($idx -ge 0) {
+          $existingSkills[$idx] = $entry
+        } else {
+          $existingSkills += $entry
+        }
+      }
+
+      # Сохраняем обновлённый manifest
+      $coworkManifest.skills = $existingSkills
+      if (Get-Member -InputObject $coworkManifest -Name "lastUpdated" -MemberType NoteProperty -ErrorAction SilentlyContinue) {
+        $coworkManifest.lastUpdated = [int64](((Get-Date).ToUniversalTime() - (Get-Date "1970-01-01")).TotalMilliseconds)
+      } else {
+        $coworkManifest | Add-Member -NotePropertyName "lastUpdated" -NotePropertyValue ([int64](((Get-Date).ToUniversalTime() - (Get-Date "1970-01-01")).TotalMilliseconds))
+      }
+      $coworkManifest | ConvertTo-Json -Depth 10 | Set-Content -Path $coworkManifestPath -Encoding UTF8
+      Write-Done "  записи добавлены в Cowork manifest"
+    }
+  }
+} else {
+  Write-Warn2 "Cowork app data не найдена ($CoworkSkillsPluginRoot). Запустите Cowork хотя бы один раз."
+}
+
+# --- 8. Register auto-update hook ---
 
 if (-not $NoAutoUpdate -and -not $Silent) {
   Write-Info "Настраиваю автообновление при запуске Cowork"
@@ -323,7 +431,7 @@ if (-not $NoAutoUpdate -and -not $Silent) {
   Write-Done "Хук SessionStart зарегистрирован в $SettingsPath"
 }
 
-# --- 8. Summary ---
+# --- 9. Summary ---
 
 if (-not $Silent) {
   Write-Host ""
@@ -339,7 +447,7 @@ if (-not $Silent) {
   Write-Host "Скиллы лежат в плагине:" -ForegroundColor Cyan
   Write-Host "  $PluginDir"
   Write-Host ""
-  Write-Host "Перезапустите Claude Cowork — скиллы появятся в Settings → Skills → Personal skills." -ForegroundColor Green
+  Write-Host "Перезапустите Claude Cowork — скиллы появятся в Settings → Skills → Personal skills (с префиксом, но имя в чате остаётся как есть)." -ForegroundColor Green
 }
 
 if ($failed.Count -gt 0) { exit 1 }
