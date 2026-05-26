@@ -226,6 +226,17 @@ if ($IncludeDev) {
 }
 $skillsToInstall = $skillsToInstall | Sort-Object -Unique
 
+$rolesToDocument = @($Roles)
+if ($IncludeDev) {
+  $rolesToDocument += "dev"
+}
+$rolesToDocument = $rolesToDocument | Sort-Object -Unique
+
+$roleSkillMap = @{}
+foreach ($role in $rolesToDocument) {
+  $roleSkillMap[$role] = @(Resolve-Bundle $role @() | Sort-Object -Unique)
+}
+
 Write-Info "К установке: $($skillsToInstall.Count) скиллов"
 
 # --- 5. Install each skill ---
@@ -234,6 +245,7 @@ $installed = @()
 $updated   = @()
 $skipped   = @()
 $failed    = @()
+$skillDetails = @{}
 
 foreach ($skillName in $skillsToInstall) {
   $spec = $manifest.skills.$skillName
@@ -274,6 +286,14 @@ foreach ($skillName in $skillsToInstall) {
     $srcDir = Join-Path $repoDir $subPath
     if (-not (Test-Path $srcDir)) { throw "Путь '$subPath' не найден в $repoUrl" }
 
+    $skillDetails[$skillName] = [pscustomobject]@{
+      Name        = $skillName
+      Owner       = if ($spec.owner) { [string]$spec.owner } else { "unknown" }
+      Description = Get-SkillFrontmatterValue -SourceDir $srcDir -FieldName "description"
+      Source      = $repoUrl
+      Path        = $subPath
+    }
+
     $result = Install-SkillDirectory -SkillName $skillName -SourceDir $srcDir -SkillsDir $SkillsDir
     if ($result -eq "updated") {
       $updated += $skillName
@@ -288,12 +308,43 @@ foreach ($skillName in $skillsToInstall) {
   }
 }
 
-# --- 6. Summary ---
+# --- 6. Install local role catalog skill ---
+
+$catalogResult = $null
+if (-not $DryRun) {
+  try {
+    $catalogSourceDir = Join-Path $CacheDir "isb-role-skills-catalog-source"
+    if (Test-Path -LiteralPath $catalogSourceDir) {
+      Remove-Item -LiteralPath $catalogSourceDir -Recurse -Force
+    }
+    Write-IsbRoleCatalogSource -CatalogDir $catalogSourceDir -Roles $rolesToDocument -RoleSkillMap $roleSkillMap -SkillDetails $skillDetails
+    $catalogResult = Install-SkillDirectory -SkillName "isb-role-skills-catalog" -SourceDir $catalogSourceDir -SkillsDir $SkillsDir
+    if ($catalogResult -eq "updated") {
+      $updated += "isb-role-skills-catalog"
+    } else {
+      $installed += "isb-role-skills-catalog"
+    }
+    Write-Done "OK: isb-role-skills-catalog ($catalogResult)"
+  } catch {
+    $failed += [pscustomobject]@{ Name = "isb-role-skills-catalog"; Error = $_.Exception.Message }
+    Write-Warn2 "FAIL: isb-role-skills-catalog — $($_.Exception.Message)"
+  }
+} else {
+  $catalogTargetDir = Join-Path $SkillsDir 'isb-role-skills-catalog'
+  if (Test-Path -LiteralPath $catalogTargetDir -PathType Container) {
+    $updated += "isb-role-skills-catalog"
+  } else {
+    $installed += "isb-role-skills-catalog"
+  }
+  Write-Done "DRY-RUN catalog: isb-role-skills-catalog -> $catalogTargetDir"
+}
+
+# --- 7. Summary ---
 
 if (-not $Silent) {
   Write-Host ""
   Write-Host "================ Итог ================" -ForegroundColor Cyan
-  Write-Host "Найдено skills: $($skillsToInstall.Count)" -ForegroundColor Cyan
+  Write-Host "Найдено skills: $($skillsToInstall.Count + 1)" -ForegroundColor Cyan
   if ($DryRun) {
     Write-Host "Dry-run: диск не менялся" -ForegroundColor Yellow
   }

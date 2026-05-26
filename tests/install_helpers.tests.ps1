@@ -107,6 +107,23 @@ try {
   $thirdResult = Install-SkillDirectory -SkillName "demo-skill" -SourceDir $sourceSkill -SkillsDir $skillsDir
   Assert-Equal -Actual $thirdResult -Expected "updated" -Message "Read-only skill directory should be made replaceable"
 
+  $catalogSource = Join-Path $tempRoot "catalog-source"
+  $roleSkillMap = @{
+    sales = @("demo-skill")
+    dev = @("demo-skill", "other-dev-skill")
+  }
+  $skillDetails = @{
+    "demo-skill" = [pscustomobject]@{ Owner = "test"; Description = "Demo description." }
+    "other-dev-skill" = [pscustomobject]@{ Owner = "test"; Description = "Developer helper." }
+  }
+  Write-IsbRoleCatalogSource -CatalogDir $catalogSource -Roles @("sales", "dev") -RoleSkillMap $roleSkillMap -SkillDetails $skillDetails
+  Assert-True -Condition (Test-Path -LiteralPath (Join-Path $catalogSource "SKILL.md")) -Message "Catalog skill should contain SKILL.md"
+  Assert-True -Condition (Test-Path -LiteralPath (Join-Path $catalogSource "references\roles\sales.md")) -Message "Catalog should contain a sales role file"
+  $salesRoleText = Get-Content -LiteralPath (Join-Path $catalogSource "references\roles\sales.md") -Raw -Encoding UTF8
+  Assert-True -Condition ($salesRoleText -like "*demo-skill*Demo description*") -Message "Role file should list skill descriptions"
+  $catalogInstallResult = Install-SkillDirectory -SkillName "isb-role-skills-catalog" -SourceDir $catalogSource -SkillsDir $skillsDir
+  Assert-Equal -Actual $catalogInstallResult -Expected "installed" -Message "Catalog should install as a normal skill"
+
   Write-Host "All install helper tests passed."
 } finally {
   if (Test-Path -LiteralPath $tempRoot) {
