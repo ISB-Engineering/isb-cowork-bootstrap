@@ -294,6 +294,26 @@ Write-Info "Зарегистрирован в локальном marketplace: $L
 # записи в manifest.json (creatorType: "user"). Префикс isb- избегает коллизий
 # со встроенными (xlsx, docx и т.п.).
 
+function New-SkillId {
+  # Cowork требует skillId в формате 'skill_<26 chars base32>' для creatorType: "user".
+  # Если skillId произвольный (например 'isb-contract-review') — Cowork сохраняет запись
+  # в manifest, но НЕ показывает её в Settings → Skills → Personal skills.
+  # Генерируем стабильный ID на основе имени скилла, чтобы повторные запуски
+  # не плодили дубли.
+  param([string]$Name)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("isb-cowork:$Name"))
+  $sha.Dispose()
+  $chars = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+  $sb = New-Object System.Text.StringBuilder
+  for ($i = 0; $i -lt 13; $i++) {
+    $b = $hash[$i]
+    [void]$sb.Append($chars[$b -band 0x1F])
+    [void]$sb.Append($chars[($b -shr 5) -band 0x1F])
+  }
+  return "skill_$($sb.ToString().Substring(0, 26))"
+}
+
 function Read-SkillFrontmatter {
   param([string]$SkillMdPath)
   $result = @{ name = ""; description = "" }
@@ -345,8 +365,11 @@ if (Test-Path $CoworkSkillsPluginRoot) {
         $srcSkillDir = Join-Path $PluginSkillsDir $skillName
         if (-not (Test-Path $srcSkillDir)) { continue }
 
-        $isbSkillId  = "$IsbSkillPrefix$skillName"
-        $cwSkillDir  = Join-Path $coworkSkillsDir $isbSkillId
+        # ID скилла: формат 'skill_<26-char-base32>' (как Cowork требует для Personal skills)
+        $isbSkillId  = New-SkillId -Name $skillName
+        # Имя папки: с префиксом 'isb-' чтобы избежать коллизий со встроенными (xlsx, docx, ...)
+        $cwSkillFolderName = "$IsbSkillPrefix$skillName"
+        $cwSkillDir  = Join-Path $coworkSkillsDir $cwSkillFolderName
 
         # Копируем содержимое скилла
         if (Test-Path $cwSkillDir) { Remove-Item -Recurse -Force $cwSkillDir }
@@ -366,10 +389,13 @@ if (Test-Path $CoworkSkillsPluginRoot) {
           enabled     = $true
         }
 
-        # Заменяем или добавляем
+        # Заменяем по skillId, или по старому формату (isb-<name>) для миграции с предыдущей версии
         $idx = -1
         for ($i = 0; $i -lt $existingSkills.Count; $i++) {
-          if ($existingSkills[$i].skillId -eq $isbSkillId) { $idx = $i; break }
+          if ($existingSkills[$i].skillId -eq $isbSkillId -or
+              $existingSkills[$i].skillId -eq "$IsbSkillPrefix$skillName") {
+            $idx = $i; break
+          }
         }
         if ($idx -ge 0) {
           $existingSkills[$idx] = $entry
