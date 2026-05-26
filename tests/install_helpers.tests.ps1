@@ -102,6 +102,11 @@ try {
   $secondResult = Install-SkillDirectory -SkillName "demo-skill" -SourceDir $sourceSkill -SkillsDir $skillsDir
   Assert-Equal -Actual $secondResult -Expected "updated" -Message "Second install should be reported as updated"
 
+  $lockedByAttribute = Join-Path $skillsDir "demo-skill"
+  (Get-Item -LiteralPath $lockedByAttribute -Force).Attributes = [System.IO.FileAttributes]::ReadOnly
+  $thirdResult = Install-SkillDirectory -SkillName "demo-skill" -SourceDir $sourceSkill -SkillsDir $skillsDir
+  Assert-Equal -Actual $thirdResult -Expected "updated" -Message "Read-only skill directory should be made replaceable"
+
   Write-Host "All install helper tests passed."
 } finally {
   if (Test-Path -LiteralPath $tempRoot) {

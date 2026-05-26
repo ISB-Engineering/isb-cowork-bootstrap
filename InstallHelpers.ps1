@@ -166,6 +166,52 @@ function Copy-SkillTree {
   }
 }
 
+function Clear-InstallBlockingAttributes {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path
+  )
+
+  if (-not (Test-Path -LiteralPath $Path)) { return }
+
+  $items = @(Get-Item -LiteralPath $Path -Force)
+  $items += @(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue)
+  foreach ($item in $items) {
+    try {
+      $item.Attributes = ($item.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly))
+      $item.Attributes = ($item.Attributes -band (-bnot [System.IO.FileAttributes]::Hidden))
+      $item.Attributes = ($item.Attributes -band (-bnot [System.IO.FileAttributes]::System))
+    } catch {
+      # Best effort. The actual replace step will report a clear failure if this matters.
+    }
+  }
+}
+
+function Move-InstallDirectoryWithRetry {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Source,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Destination,
+
+    [int]$Attempts = 3
+  )
+
+  $lastError = $null
+  for ($attempt = 1; $attempt -le $Attempts; $attempt++) {
+    try {
+      Move-Item -LiteralPath $Source -Destination $Destination -Force
+      return
+    } catch {
+      $lastError = $_.Exception.Message
+      Start-Sleep -Milliseconds (250 * $attempt)
+    }
+  }
+
+  throw "Cannot replace '$Source': $lastError. Close Claude/Cowork and any Explorer window opened inside this folder, then rerun the installer."
+}
+
 function Install-SkillDirectory {
   param(
     [Parameter(Mandatory = $true)]
@@ -199,12 +245,14 @@ function Install-SkillDirectory {
     Copy-SkillTree -SourceDir $SourceDir -DestinationDir $tempDir
 
     if ($exists) {
-      Move-Item -LiteralPath $targetDir -Destination $backupDir -Force
+      Clear-InstallBlockingAttributes -Path $targetDir
+      Move-InstallDirectoryWithRetry -Source $targetDir -Destination $backupDir
     }
 
-    Move-Item -LiteralPath $tempDir -Destination $targetDir -Force
+    Move-InstallDirectoryWithRetry -Source $tempDir -Destination $targetDir
 
     if (Test-Path -LiteralPath $backupDir) {
+      Clear-InstallBlockingAttributes -Path $backupDir
       Remove-Item -LiteralPath $backupDir -Recurse -Force
     }
 
@@ -215,9 +263,11 @@ function Install-SkillDirectory {
       Move-Item -LiteralPath $backupDir -Destination $targetDir -Force
     }
     if (Test-Path -LiteralPath $tempDir) {
+      Clear-InstallBlockingAttributes -Path $tempDir
       Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path -LiteralPath $backupDir) {
+      Clear-InstallBlockingAttributes -Path $backupDir
       Remove-Item -LiteralPath $backupDir -Recurse -Force -ErrorAction SilentlyContinue
     }
     throw
