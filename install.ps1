@@ -71,6 +71,12 @@ function Write-Warn2($msg) {
 
 # --- 1. Pre-flight ---
 
+# Защита от ситуации, когда несколько ролей пришли одной строкой через запятую
+# (так бывает при кросс-процесс вызовах через Start-Process -ArgumentList).
+if ($Roles.Count -eq 1 -and $Roles[0] -match ',') {
+  $Roles = $Roles[0] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+}
+
 Write-Info "Старт. Роли: $($Roles -join ', ')$(if ($IncludeDev) { ' + dev' })"
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
