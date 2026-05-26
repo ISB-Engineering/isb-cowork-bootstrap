@@ -30,22 +30,46 @@ param(
 
   [switch]$IncludeDev,
   [switch]$Silent,
+  [switch]$DryRun,
 
   [string]$ManifestPath = "",
-  [string]$SkillsDir    = (Join-Path $env:USERPROFILE ".claude\skills"),
+  [string]$SkillsDir    = "",
   [string]$CacheDir     = (Join-Path $env:TEMP "isb-cowork-cache"),
-  [string]$SettingsPath = (Join-Path $env:USERPROFILE ".claude\settings.json")
+  [string]$SettingsPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+$helperPath = Join-Path $PSScriptRoot "InstallHelpers.ps1"
+if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
+  $helperPath = Join-Path $env:TEMP "isb-cowork-InstallHelpers.ps1"
+  $helperUrl = "https://raw.githubusercontent.com/ISB-Engineering/isb-cowork-bootstrap/main/InstallHelpers.ps1"
+  Invoke-WebRequest -Uri $helperUrl -UseBasicParsing -OutFile $helperPath
+}
+. $helperPath
+
+if ([string]::IsNullOrWhiteSpace($SkillsDir)) {
+  $SkillsDir = Get-ClaudeGlobalSkillsDir
+}
+if ([string]::IsNullOrWhiteSpace($SettingsPath)) {
+  $SettingsPath = Get-ClaudeSettingsPath
+}
+
 function Invoke-Git {
   param([string[]]$GitArgs)
-  $output = & git @GitArgs 2>&1
-  if ($LASTEXITCODE -ne 0) {
-    throw "git $($GitArgs -join ' ') failed (exit $LASTEXITCODE): $output"
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & git @GitArgs 2>&1
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+
+  if ($exitCode -ne 0) {
+    throw "git $($GitArgs -join ' ') failed (exit $exitCode): $output"
   }
 }
 
@@ -71,18 +95,21 @@ if ($Roles.Count -eq 1 -and $Roles[0] -match ',') {
   $Roles = $Roles[0] -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 }
 
-Write-Info "Старт. Роли: $($Roles -join ', ')$(if ($IncludeDev) { ' + dev' })"
+Write-Info "Старт. Роли: $($Roles -join ', ')$(if ($IncludeDev) { ' + dev' })$(if ($DryRun) { ' [dry-run]' })"
+Write-Info "Папка установки: $SkillsDir"
 
-if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+if ((-not $DryRun) -and (-not (Get-Command git -ErrorAction SilentlyContinue))) {
   throw "Git не найден. Установите Git (https://git-scm.com/download/win) и повторите."
 }
 
-New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
-New-Item -ItemType Directory -Force -Path $CacheDir  | Out-Null
+if (-not $DryRun) {
+  New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $CacheDir  | Out-Null
+}
 
 # --- 2. Убрать SessionStart hook если был установлен предыдущими версиями ---
 
-if (Test-Path $SettingsPath) {
+if ((-not $DryRun) -and (Test-Path $SettingsPath)) {
   try {
     $settings = Get-Content $SettingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $modified = $false
@@ -123,18 +150,52 @@ if ($ManifestPath -and (Test-Path $ManifestPath)) {
 } else {
   $bootstrapRepoDir = Join-Path $CacheDir "ISB-Engineering_isb-cowork-bootstrap"
   Write-Info "Получаю manifest.json"
-  try {
-    if (Test-Path (Join-Path $bootstrapRepoDir ".git")) {
-      Invoke-Git @("-C", $bootstrapRepoDir, "fetch", "--depth", "1", "--quiet", "origin", "main")
-      Invoke-Git @("-C", $bootstrapRepoDir, "reset", "--hard", "--quiet", "FETCH_HEAD")
-    } else {
-      Invoke-Git @("clone", "--depth", "1", "--quiet", "https://github.com/ISB-Engineering/isb-cowork-bootstrap.git", $bootstrapRepoDir)
+  if ($DryRun) {
+    try {
+      $manifestUrl = "https://raw.githubusercontent.com/ISB-Engineering/isb-cowork-bootstrap/main/manifest.json"
+      $manifest = Invoke-RestMethod -Uri $manifestUrl -UseBasicParsing
+    } catch {
+      throw "Не удалось получить manifest.json: $($_.Exception.Message)"
     }
-  } catch {
-    throw "Не удалось получить manifest.json: $($_.Exception.Message)"
+  } else {
+    try {
+      if (Test-Path (Join-Path $bootstrapRepoDir ".git")) {
+        Invoke-Git @("-C", $bootstrapRepoDir, "fetch", "--depth", "1", "--quiet", "origin", "main")
+        Invoke-Git @("-C", $bootstrapRepoDir, "reset", "--hard", "--quiet", "FETCH_HEAD")
+      } else {
+        Invoke-Git @("clone", "--depth", "1", "--quiet", "https://github.com/ISB-Engineering/isb-cowork-bootstrap.git", $bootstrapRepoDir)
+      }
+    } catch {
+      throw "Не удалось получить manifest.json: $($_.Exception.Message)"
+    }
+    $localManifest = Join-Path $bootstrapRepoDir "manifest.json"
+    $manifest = Get-Content $localManifest -Raw -Encoding UTF8 | ConvertFrom-Json
   }
-  $localManifest = Join-Path $bootstrapRepoDir "manifest.json"
-  $manifest = Get-Content $localManifest -Raw -Encoding UTF8 | ConvertFrom-Json
+}
+
+if (-not $manifest.skills) {
+  throw "В manifest.json нет секции skills"
+}
+if (-not $manifest.bundles) {
+  throw "В manifest.json нет секции bundles"
+}
+
+foreach ($skillProperty in $manifest.skills.PSObject.Properties) {
+  Assert-SafeSkillName -Name $skillProperty.Name
+  $skillSpec = $skillProperty.Value
+  if ([string]::IsNullOrWhiteSpace($skillSpec.url)) {
+    throw "У скилла '$($skillProperty.Name)' не указан url"
+  }
+  if ([string]::IsNullOrWhiteSpace($skillSpec.path)) {
+    throw "У скилла '$($skillProperty.Name)' не указан path"
+  }
+  if ([System.IO.Path]::IsPathRooted([string]$skillSpec.path)) {
+    throw "У скилла '$($skillProperty.Name)' path не должен быть абсолютным"
+  }
+  $pathParts = ([string]$skillSpec.path) -split '[\\/]+' | Where-Object { $_ }
+  if ($pathParts -contains "..") {
+    throw "У скилла '$($skillProperty.Name)' path не должен содержать '..'"
+  }
 }
 
 # --- 4. Resolve bundles -> skills ---
@@ -169,21 +230,40 @@ Write-Info "К установке: $($skillsToInstall.Count) скиллов"
 
 # --- 5. Install each skill ---
 
-$succeeded = @()
+$installed = @()
+$updated   = @()
+$skipped   = @()
 $failed    = @()
 
 foreach ($skillName in $skillsToInstall) {
   $spec = $manifest.skills.$skillName
-  if (-not $spec) { continue }
+  if (-not $spec) {
+    $skipped += $skillName
+    Write-Warn2 "SKIP: $skillName — нет описания в manifest.skills"
+    continue
+  }
 
   $repoUrl  = $spec.url
   $subPath  = $spec.path
   $ref      = if ($spec.ref) { $spec.ref } else { "main" }
-  $repoSafe = ($repoUrl -replace "https://github.com/", "" -replace "\.git$", "" -replace "/", "_")
+  $repoSafe = ConvertTo-SafeCacheName -Value $repoUrl
   $repoDir  = Join-Path $CacheDir $repoSafe
-  $skillDir = Join-Path $SkillsDir $skillName
 
   try {
+    Assert-SafeSkillName -Name $skillName
+
+    if ($DryRun) {
+      $targetDir = Join-Path $SkillsDir $skillName
+      if (Test-Path -LiteralPath $targetDir -PathType Container) {
+        $updated += $skillName
+        Write-Done "DRY-RUN update: $skillName -> $targetDir"
+      } else {
+        $installed += $skillName
+        Write-Done "DRY-RUN install: $skillName -> $targetDir"
+      }
+      continue
+    }
+
     if (-not (Test-Path (Join-Path $repoDir ".git"))) {
       Invoke-Git @("clone", "--depth", "1", "--quiet", "--branch", $ref, $repoUrl, $repoDir)
     } else {
@@ -194,11 +274,14 @@ foreach ($skillName in $skillsToInstall) {
     $srcDir = Join-Path $repoDir $subPath
     if (-not (Test-Path $srcDir)) { throw "Путь '$subPath' не найден в $repoUrl" }
 
-    if (Test-Path $skillDir) { Remove-Item -Recurse -Force $skillDir }
-    Copy-Item -Recurse -Force $srcDir $skillDir
+    $result = Install-SkillDirectory -SkillName $skillName -SourceDir $srcDir -SkillsDir $SkillsDir
+    if ($result -eq "updated") {
+      $updated += $skillName
+    } else {
+      $installed += $skillName
+    }
 
-    $succeeded += $skillName
-    Write-Done "OK: $skillName"
+    Write-Done "OK: $skillName ($result)"
   } catch {
     $failed += [pscustomobject]@{ Name = $skillName; Error = $_.Exception.Message }
     Write-Warn2 "FAIL: $skillName — $($_.Exception.Message)"
@@ -210,14 +293,24 @@ foreach ($skillName in $skillsToInstall) {
 if (-not $Silent) {
   Write-Host ""
   Write-Host "================ Итог ================" -ForegroundColor Cyan
-  Write-Host "Установлено: $($succeeded.Count) скиллов" -ForegroundColor Green
+  Write-Host "Найдено skills: $($skillsToInstall.Count)" -ForegroundColor Cyan
+  if ($DryRun) {
+    Write-Host "Dry-run: диск не менялся" -ForegroundColor Yellow
+  }
+  Write-Host "Установлено: $($installed.Count)" -ForegroundColor Green
+  Write-Host "Обновлено: $($updated.Count)" -ForegroundColor Green
+  Write-Host "Пропущено: $($skipped.Count)" -ForegroundColor Yellow
+  $errorColor = if ($failed.Count -gt 0) { "Yellow" } else { "Green" }
+  Write-Host "Ошибок: $($failed.Count)" -ForegroundColor $errorColor
   Write-Host ""
   Write-Host "Папка: $SkillsDir" -ForegroundColor Cyan
   Write-Host ""
-  Write-Host "ВАЖНО: полностью закройте Cowork (через диспетчер задач) и откройте заново." -ForegroundColor Yellow
-  Write-Host "Скиллы активируются в чате по триггерам, например:" -ForegroundColor Cyan
-  Write-Host '  "помоги проверить договор поставки на риски" → contract-review' -ForegroundColor Gray
-  Write-Host '  "что это за поправка в законе РК" → npa-monitor' -ForegroundColor Gray
+  if (-not $DryRun) {
+    Write-Host "ВАЖНО: полностью закройте Cowork (через диспетчер задач) и откройте заново." -ForegroundColor Yellow
+    Write-Host "Скиллы активируются в чате по триггерам, например:" -ForegroundColor Cyan
+    Write-Host '  "помоги проверить договор поставки на риски" → contract-review' -ForegroundColor Gray
+    Write-Host '  "что это за поправка в законе РК" → npa-monitor' -ForegroundColor Gray
+  }
 }
 
 if ($failed.Count -gt 0) { exit 1 }
