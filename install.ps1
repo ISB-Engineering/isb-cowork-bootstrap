@@ -61,6 +61,15 @@ function Invoke-Git {
   }
 }
 
+# PowerShell 5.1's Set-Content -Encoding UTF8 пишет с BOM (﻿).
+# Cowork (Electron/Node.js) парсит JSON через JSON.parse, который падает на BOM —
+# поэтому пишем UTF-8 БЕЗ BOM через .NET API.
+function Write-Utf8NoBom {
+  param([string]$Path, [string]$Content)
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Write-Info($msg) {
   if (-not $Silent) { Write-Host "[isb-cowork] $msg" -ForegroundColor Cyan }
 }
@@ -217,7 +226,7 @@ $pluginManifest = [PSCustomObject]@{
     email = "info@isb-engineering.kz"
   }
 }
-$pluginManifest | ConvertTo-Json -Depth 10 | Set-Content -Path $pluginManifestPath -Encoding UTF8
+Write-Utf8NoBom -Path $pluginManifestPath -Content ($pluginManifest | ConvertTo-Json -Depth 10)
 
 Write-Info "Записан plugin.json: $pluginManifestPath"
 
@@ -275,7 +284,7 @@ if ($ourPlugin) {
   $mp.plugins = @(@($mp.plugins) + $newEntry) | Where-Object { $_ -ne $null }
 }
 
-$mp | ConvertTo-Json -Depth 10 | Set-Content -Path $LocalMarketplaceFile -Encoding UTF8
+Write-Utf8NoBom -Path $LocalMarketplaceFile -Content ($mp | ConvertTo-Json -Depth 10)
 Write-Info "Зарегистрирован в локальном marketplace: $LocalMarketplaceFile"
 
 # --- 7. Register in Cowork UI (Settings → Skills → Personal skills) ---
@@ -376,7 +385,7 @@ if (Test-Path $CoworkSkillsPluginRoot) {
       } else {
         $coworkManifest | Add-Member -NotePropertyName "lastUpdated" -NotePropertyValue ([int64](((Get-Date).ToUniversalTime() - (Get-Date "1970-01-01")).TotalMilliseconds))
       }
-      $coworkManifest | ConvertTo-Json -Depth 10 | Set-Content -Path $coworkManifestPath -Encoding UTF8
+      Write-Utf8NoBom -Path $coworkManifestPath -Content ($coworkManifest | ConvertTo-Json -Depth 10)
       Write-Done "  записи добавлены в Cowork manifest"
     }
   }
@@ -427,7 +436,7 @@ if (-not $NoAutoUpdate -and -not $Silent) {
 
   $settingsDir = Split-Path $SettingsPath -Parent
   New-Item -ItemType Directory -Force -Path $settingsDir | Out-Null
-  $settings | ConvertTo-Json -Depth 10 | Set-Content -Path $SettingsPath -Encoding UTF8
+  Write-Utf8NoBom -Path $SettingsPath -Content ($settings | ConvertTo-Json -Depth 10)
   Write-Done "Хук SessionStart зарегистрирован в $SettingsPath"
 }
 
