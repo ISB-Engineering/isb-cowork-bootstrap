@@ -108,19 +108,15 @@ try {
   Assert-Equal -Actual $thirdResult -Expected "updated" -Message "Read-only skill directory should be made replaceable"
 
   $catalogSource = Join-Path $tempRoot "catalog-source"
-  $roleSkillMap = @{
-    sales = @("demo-skill")
-    dev = @("demo-skill", "other-dev-skill")
-  }
-  $skillDetails = @{
-    "demo-skill" = [pscustomobject]@{ Owner = "test"; Description = "Demo description." }
-    "other-dev-skill" = [pscustomobject]@{ Owner = "test"; Description = "Developer helper." }
-  }
-  Write-IsbRoleCatalogSource -CatalogDir $catalogSource -Roles @("sales", "dev") -RoleSkillMap $roleSkillMap -SkillDetails $skillDetails
+  $templatesDir = Join-Path $tempRoot "role-catalog"
+  New-Item -ItemType Directory -Force -Path (Join-Path $templatesDir "roles") | Out-Null
+  "# Sales`n`nHuman-readable sales catalog." | Set-Content -LiteralPath (Join-Path $templatesDir "roles\sales.md") -Encoding UTF8
+  "# Dev`n`nHuman-readable dev catalog." | Set-Content -LiteralPath (Join-Path $templatesDir "roles\dev.md") -Encoding UTF8
+  Write-IsbRoleCatalogSource -CatalogDir $catalogSource -Roles @("sales", "dev") -CatalogTemplatesDir $templatesDir
   Assert-True -Condition (Test-Path -LiteralPath (Join-Path $catalogSource "SKILL.md")) -Message "Catalog skill should contain SKILL.md"
   Assert-True -Condition (Test-Path -LiteralPath (Join-Path $catalogSource "references\roles\sales.md")) -Message "Catalog should contain a sales role file"
   $salesRoleText = Get-Content -LiteralPath (Join-Path $catalogSource "references\roles\sales.md") -Raw -Encoding UTF8
-  Assert-True -Condition ($salesRoleText -like "*demo-skill*Demo description*") -Message "Role file should list skill descriptions"
+  Assert-True -Condition ($salesRoleText -like "*Human-readable sales catalog*") -Message "Role file should use the curated role template"
   $catalogInstallResult = Install-SkillDirectory -SkillName "isb-role-skills-catalog" -SourceDir $catalogSource -SkillsDir $skillsDir
   Assert-Equal -Actual $catalogInstallResult -Expected "installed" -Message "Catalog should install as a normal skill"
 

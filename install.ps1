@@ -147,6 +147,7 @@ if ((-not $DryRun) -and (Test-Path $SettingsPath)) {
 
 if ($ManifestPath -and (Test-Path $ManifestPath)) {
   $manifest = Get-Content $ManifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
+  $bootstrapSourceDir = Split-Path -Parent (Resolve-Path $ManifestPath)
 } else {
   $bootstrapRepoDir = Join-Path $CacheDir "ISB-Engineering_isb-cowork-bootstrap"
   Write-Info "Получаю manifest.json"
@@ -171,6 +172,7 @@ if ($ManifestPath -and (Test-Path $ManifestPath)) {
     $localManifest = Join-Path $bootstrapRepoDir "manifest.json"
     $manifest = Get-Content $localManifest -Raw -Encoding UTF8 | ConvertFrom-Json
   }
+  $bootstrapSourceDir = $bootstrapRepoDir
 }
 
 if (-not $manifest.skills) {
@@ -232,11 +234,6 @@ if ($IncludeDev) {
 }
 $rolesToDocument = $rolesToDocument | Sort-Object -Unique
 
-$roleSkillMap = @{}
-foreach ($role in $rolesToDocument) {
-  $roleSkillMap[$role] = @(Resolve-Bundle $role @() | Sort-Object -Unique)
-}
-
 Write-Info "К установке: $($skillsToInstall.Count) скиллов"
 
 # --- 5. Install each skill ---
@@ -245,7 +242,6 @@ $installed = @()
 $updated   = @()
 $skipped   = @()
 $failed    = @()
-$skillDetails = @{}
 
 foreach ($skillName in $skillsToInstall) {
   $spec = $manifest.skills.$skillName
@@ -286,14 +282,6 @@ foreach ($skillName in $skillsToInstall) {
     $srcDir = Join-Path $repoDir $subPath
     if (-not (Test-Path $srcDir)) { throw "Путь '$subPath' не найден в $repoUrl" }
 
-    $skillDetails[$skillName] = [pscustomobject]@{
-      Name        = $skillName
-      Owner       = if ($spec.owner) { [string]$spec.owner } else { "unknown" }
-      Description = Get-SkillFrontmatterValue -SourceDir $srcDir -FieldName "description"
-      Source      = $repoUrl
-      Path        = $subPath
-    }
-
     $result = Install-SkillDirectory -SkillName $skillName -SourceDir $srcDir -SkillsDir $SkillsDir
     if ($result -eq "updated") {
       $updated += $skillName
@@ -317,7 +305,8 @@ if (-not $DryRun) {
     if (Test-Path -LiteralPath $catalogSourceDir) {
       Remove-Item -LiteralPath $catalogSourceDir -Recurse -Force
     }
-    Write-IsbRoleCatalogSource -CatalogDir $catalogSourceDir -Roles $rolesToDocument -RoleSkillMap $roleSkillMap -SkillDetails $skillDetails
+    $catalogTemplatesDir = Join-Path $bootstrapSourceDir "role-catalog"
+    Write-IsbRoleCatalogSource -CatalogDir $catalogSourceDir -Roles $rolesToDocument -CatalogTemplatesDir $catalogTemplatesDir
     $catalogResult = Install-SkillDirectory -SkillName "isb-role-skills-catalog" -SourceDir $catalogSourceDir -SkillsDir $SkillsDir
     if ($catalogResult -eq "updated") {
       $updated += "isb-role-skills-catalog"
